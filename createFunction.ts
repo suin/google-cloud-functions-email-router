@@ -1,19 +1,40 @@
 import type { GetTopicsResponse, Topic } from '@google-cloud/pubsub'
-import { parseEmailData } from '@suin/email-data'
-import { parseEventData } from '@suin/event-data'
+import { EmailData, parseEmailData } from '@suin/email-data'
+import { EventData, parseEventData } from '@suin/event-data'
 import type { PubSubFunction } from '@suin/google-cloud-typed-pubsub-function'
 
 export const createFunction = ({
   pubsub,
   logger = defaultLogger,
 }: Dependencies): PubSubFunction => async event => {
-  const eventData = parseEventData(
-    JSON.parse(Buffer.from(event.data, 'base64').toString('utf-8')),
-  )
-  const emailData = parseEmailData(eventData.data)
+  let eventData: EventData
+  try {
+    eventData = parseEventData(
+      JSON.parse(Buffer.from(event.data, 'base64').toString('utf-8')),
+    )
+  } catch (error) {
+    logger.error('Failed to parse EventData', { event })
+    console.error(error)
+    return
+  }
+
+  let emailData: EmailData
+  try {
+    emailData = parseEmailData(eventData.data)
+  } catch (error) {
+    logger.error('Failed to parse EmailData', { error, eventData })
+    console.error(error)
+    return
+  }
 
   // Gets all topics in this project
-  const [topics] = await pubsub.getTopics()
+  let topics: Topic[]
+  try {
+    ;[topics] = await pubsub.getTopics()
+  } catch (error) {
+    logger.error('Failed to get topics', { error })
+    return
+  }
   const topicIds = new Set(
     topics.map(topic => decodeURIComponent(topic.name.split('/').pop()!)),
   )
